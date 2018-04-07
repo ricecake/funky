@@ -1,0 +1,26 @@
+---
+app:
+  name: funky
+amqp:
+  host: 127.0.0.1
+  port: 5672
+  user: guest
+  pass: guest
+  vhost: funky
+  heartbeat: 5
+  exchanges:
+    - name: request
+      type: topic
+      durable: false
+      transient: false
+  queues:
+    - name: execution
+      durable: false
+      transient: true
+      exclusive: false
+      binding:
+        - exchange: request
+          key: execute.initial
+        - exchange: request
+          key: execute.internal
+

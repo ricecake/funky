@@ -25,7 +25,6 @@ import (
 	"github.com/ricecake/rascal"
 	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"github.com/streadway/amqp"
 	"log"
 	"sync"
@@ -103,13 +102,13 @@ to quickly create a Cobra application.`,
 
 			pubErr := ch.Publish(
 				"request",         // exchange
-				"testing.request", // routing key
+				"execute.initial", // routing key
 				false,             // mandatory
 				false,             // immediate
 				amqp.Publishing{
 					ContentType:   "text/plain",
 					CorrelationId: corrID.String(),
-					ReplyTo:       viper.GetString("amqp.queue.name"),
+					ReplyTo:       amqpHandler.Default,
 					Body:          rawBody,
 				})
 			if pubErr != nil {

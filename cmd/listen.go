@@ -22,9 +22,14 @@ package cmd
 
 import (
 	"github.com/gin-gonic/gin"
-	"github.com/ricecake/funky/engine"
+	"github.com/ricecake/rascal"
+	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 	"log"
+	"sync"
+	"time"
 )
 
 // listenCmd represents the listen command
@@ -40,15 +45,86 @@ to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		log.Println("listen called")
 
+		amqpHandler := new(rascal.Rascal)
+
+		amqpHandler.Connect()
+		defer amqpHandler.Cleanup()
+
+		var mapLock sync.Mutex
+		reqTable := make(map[uuid.UUID]chan amqp.Delivery)
+		amqpHandler.SetHandler(amqpHandler.Default, func(msg amqp.Delivery, ch *amqp.Channel) {
+			rawUUID, uuidErr := uuid.FromString(msg.CorrelationId)
+			if uuidErr == nil {
+				mapLock.Lock()
+				channel, exists := reqTable[rawUUID]
+				if exists {
+					delete(reqTable, rawUUID)
+					mapLock.Unlock()
+					channel <- msg
+					msg.Ack(false)
+				} else {
+					mapLock.Unlock()
+					nackErr := msg.Nack(false, false)
+					if nackErr != nil {
+						log.Printf("failed to Nack() (no requeue): %s", nackErr)
+					}
+				}
+			} else {
+				log.Printf("Malformed UUID: %s", msg.CorrelationId)
+				nackErr := msg.Nack(false, false)
+				if nackErr != nil {
+					log.Printf("failed to Nack() (no requeue): %s", nackErr)
+				}
+			}
+		})
+
+		amqpHandler.Consume()
+
 		r := gin.Default()
 		r.GET("/ping", func(c *gin.Context) {
-			eng, _ := engine.Create()
-			defer eng.Cleanup()
-			eng.LoadScript("log(\"test\"); setHandler(function(a, b){ log(a+b); callRemote(\"a\",[[{}]], function(){}); return [[\"cat\"]]; })")
-			result, _ := eng.Execute("cat", map[string]string{"cat": "Dog"})
-			c.JSON(200, gin.H{
-				"message": result,
-			})
+			corrID, uuidErr := uuid.NewV4()
+			if uuidErr != nil {
+				c.String(500, uuidErr.Error())
+			}
+			reqChan := make(chan amqp.Delivery)
+
+			rawBody, bodyErr := c.GetRawData()
+			if bodyErr != nil {
+				c.String(500, bodyErr.Error())
+			}
+			ch, chErr := amqpHandler.Channel()
+			if chErr != nil {
+				c.String(500, chErr.Error())
+			}
+
+			mapLock.Lock()
+			reqTable[corrID] = reqChan
+			mapLock.Unlock()
+
+			pubErr := ch.Publish(
+				"request",         // exchange
+				"testing.request", // routing key
+				false,             // mandatory
+				false,             // immediate
+				amqp.Publishing{
+					ContentType:   "text/plain",
+					CorrelationId: corrID.String(),
+					ReplyTo:       viper.GetString("amqp.queue.name"),
+					Body:          rawBody,
+				})
+			if pubErr != nil {
+				c.String(500, pubErr.Error())
+			}
+
+			select {
+			case reply := <-reqChan:
+				c.JSON(200, gin.H{
+					"message": string(reply.Body),
+				})
+			case <-time.After(1 * time.Second):
+				c.String(500, "TIMEOUT")
+			}
+
 		})
 		r.Run() // listen and serve on 0.0.0.0:8080
 

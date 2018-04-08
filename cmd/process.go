@@ -22,8 +22,15 @@ package cmd
 
 import (
 	"fmt"
+	"github.com/ricecake/funky/engine"
 	"github.com/ricecake/rascal"
 	"github.com/spf13/cobra"
+	"github.com/streadway/amqp"
+	"log"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
 )
 
 // processCmd represents the process command
@@ -38,16 +45,45 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Println("process called")
-                amqpHandler := new(rascal.Rascal)
+		amqpHandler := new(rascal.Rascal)
 
 		err := amqpHandler.Connect()
 		if err != nil {
 			panic(err)
 		}
+		defer amqpHandler.Cleanup()
+		amqpHandler.SetHandler(amqpHandler.Custom, func(msg amqp.Delivery, ch *amqp.Channel) {
+			resultChan := make(chan string)
+			requestChan := make(chan engine.Request)
 
-		fmt.Printf("handler: %+v\n", amqpHandler)
+			replyChan := make(chan amqp.Delivery)
+			eng, _ := engine.Create("test", resultChan, requestChan)
+			defer eng.Cleanup()
 
-		amqpHandler.Cleanup()
+			eng.LoadScript("log(\"cat\", \"test\"); setHandler(function(a, b){ log(\"test2\", a+b); callRemote(\"a\",[[{}]], function(){}); return [[\"cat\"]]; })")
+			eng.Execute("cat", map[string]string{"cat": "Dog"})
+			select {
+			case result := <-resultChan:
+				log.Println("Result!", result)
+			case request := <-requestChan:
+				log.Println("request!", request)
+			case reply := <-replyChan:
+				log.Println("reply!", reply)
+			case <-time.After(10 * time.Second):
+				log.Println("Timeout!")
+			}
+		})
+		amqpHandler.SetHandler(amqpHandler.Default, func(msg amqp.Delivery, ch *amqp.Channel) {
+			log.Println("Got one!")
+		})
+		amqpHandler.Consume()
+
+		osChannel := make(chan os.Signal, 2)
+		signal.Notify(osChannel, os.Interrupt, syscall.SIGTERM)
+		sig := <-osChannel
+		log.Printf("Received [%+v]; shutting down...", sig)
+		os.Exit(0)
+
 	},
 }
 

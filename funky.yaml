@@ -13,14 +13,13 @@ amqp:
       type: topic
       durable: false
       transient: false
-  queues:
-    - name: execution
-      durable: false
-      transient: true
-      exclusive: false
-      binding:
-        - exchange: request
-          key: execute.initial
-        - exchange: request
-          key: execute.internal
+  queue:
+    name: execution
+    durable: false
+    transient: true
+    exclusive: false
+    bindings:
+      request:
+        - execute.initial
+        - execute.internal
 

@@ -47,7 +47,6 @@ func Create(context string, result chan string, request chan Request) (*Engine, 
 		c.Dup(0)
 		c.PutPropString(-2, "handler")
 		this.CanExecute = true
-		log.Println("set handler")
 		return 0
 	})
 
@@ -99,11 +98,10 @@ func (this *Engine) LoadScript(script string) error {
 	return nil
 }
 
-func (this *Engine) Execute(name string, context map[string]string) (string, error) {
+func (this *Engine) Execute(name string, context map[string]string) error {
 	if !this.CanExecute {
-		return "", errors.New("Engine not executable")
+		return errors.New("Engine not executable")
 	}
-	log.Println("executing")
 	ctx := this.Interp
 	ctx.PushGlobalStash()
 	ctx.GetPropString(-1, "handler")
@@ -119,7 +117,10 @@ func (this *Engine) Execute(name string, context map[string]string) (string, err
 	// This should be done via a channel... to make more async
 	result := ctx.GetString(-1)
 	ctx.Pop()
-	return result, nil
+	go func() {
+		this.result <- result
+	}()
+	return nil
 }
 
 func (this *Engine) Response(UUID string, data string) error {
@@ -128,6 +129,5 @@ func (this *Engine) Response(UUID string, data string) error {
 
 func (this *Engine) Cleanup() error {
 	defer this.Interp.DestroyHeap()
-	log.Println("Cleanup")
 	return nil
 }

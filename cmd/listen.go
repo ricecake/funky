@@ -95,6 +95,7 @@ to quickly create a Cobra application.`,
 			if chErr != nil {
 				c.String(500, chErr.Error())
 			}
+			defer ch.Close()
 
 			mapLock.Lock()
 			reqTable[corrID] = reqChan

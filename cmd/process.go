@@ -29,6 +29,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -52,6 +53,27 @@ to quickly create a Cobra application.`,
 			panic(err)
 		}
 		defer amqpHandler.Cleanup()
+
+		var mapLock sync.Mutex
+		reqTable := make(map[string]chan amqp.Delivery)
+		amqpHandler.SetHandler(amqpHandler.Default, func(msg amqp.Delivery, ch *amqp.Channel) {
+			rawUUID := msg.CorrelationId
+			mapLock.Lock()
+			channel, exists := reqTable[rawUUID]
+			if exists {
+				delete(reqTable, rawUUID)
+				mapLock.Unlock()
+				channel <- msg
+				msg.Ack(false)
+			} else {
+				mapLock.Unlock()
+				nackErr := msg.Nack(false, false)
+				if nackErr != nil {
+					log.Printf("failed to Nack() (no requeue): %s", nackErr)
+				}
+			}
+		})
+
 		amqpHandler.SetHandler(amqpHandler.Custom, func(msg amqp.Delivery, ch *amqp.Channel) {
 			resultChan := make(chan string)
 			requestChan := make(chan engine.Request)
@@ -60,22 +82,38 @@ to quickly create a Cobra application.`,
 			eng, _ := engine.Create("test", resultChan, requestChan)
 			defer eng.Cleanup()
 
-			eng.LoadScript("log(\"cat\", \"test\"); setHandler(function(a, b){ log(\"test2\", a+b); callRemote(\"a\",[[{}]], function(){}); return [[\"cat\"]]; })")
+			eng.LoadScript("setHandler(function(a, b){ return [[\"cat\"]]; })")
+
 			eng.Execute("cat", map[string]string{"cat": "Dog"})
 			select {
 			case result := <-resultChan:
-				log.Println("Result!", result)
+				if msg.ReplyTo != "" && msg.CorrelationId != "" {
+					pubErr := ch.Publish(
+						"",          // exchange
+						msg.ReplyTo, // routing key
+						false,       // mandatory
+						false,       // immediate
+						amqp.Publishing{
+							ContentType:   "text/plain",
+							CorrelationId: msg.CorrelationId,
+							Body:          []byte(result),
+						})
+					if pubErr != nil {
+						log.Println("reply error: %s", pubErr.Error())
+						msg.Nack(false, false)
+					}
+				}
+				msg.Ack(false)
 			case request := <-requestChan:
 				log.Println("request!", request)
 			case reply := <-replyChan:
 				log.Println("reply!", reply)
-			case <-time.After(10 * time.Second):
+			case <-time.After(1 * time.Second):
+				msg.Nack(false, false)
 				log.Println("Timeout!")
 			}
 		})
-		amqpHandler.SetHandler(amqpHandler.Default, func(msg amqp.Delivery, ch *amqp.Channel) {
-			log.Println("Got one!")
-		})
+
 		amqpHandler.Consume()
 
 		osChannel := make(chan os.Signal, 2)

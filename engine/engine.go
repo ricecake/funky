@@ -26,7 +26,7 @@ func Create() (*Engine, error) {
 		log.Println(c.SafeToString(-1))
 		return 0
 	})
-// Need getValue, setValue, and setResponse functions
+// Need getValue, setValue, loadScript and setResponse functions.  Add channel and context to struct.
 	ctx.PushGlobalGoFunction("setHandler", func(c *duktape.Context) int {
 		// setHandler(handler(type, data))
 		c.RequireCallable(0)

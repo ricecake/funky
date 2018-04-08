@@ -111,6 +111,7 @@ to quickly create a Cobra application.`,
 					CorrelationId: corrID.String(),
 					ReplyTo:       amqpHandler.Default,
 					Body:          rawBody,
+					Expiration:   "1000",
 				})
 			if pubErr != nil {
 				c.String(500, pubErr.Error())

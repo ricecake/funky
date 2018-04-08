@@ -8,6 +8,7 @@ amqp:
   pass: guest
   vhost: funky
   heartbeat: 5
+  auto-queue: true
   exchanges:
     - name: request
       type: topic

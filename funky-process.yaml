@@ -8,6 +8,7 @@ amqp:
   pass: guest
   vhost: funky
   heartbeat: 5
+  auto-queue: true
   exchanges:
     - name: request
       type: topic
@@ -18,7 +19,6 @@ amqp:
     durable: false
     transient: false
     exclusive: false
-    auto-queue: true
     bindings:
       request:
         - execute.initial

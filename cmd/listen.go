@@ -103,7 +103,7 @@ to quickly create a Cobra application.`,
 				Body:    rawBody,
 				Headers: c.Request.Header,
 			}
-			routes, routeErr := datastore.LookupRoute(outbound.Host, outbound.Url)
+			routes, owner, scope, routeErr := datastore.LookupDomainRoute(outbound.Host, outbound.Url)
 			if routeErr != nil {
 				c.String(500, routeErr.Error())
 				return
@@ -113,6 +113,9 @@ to quickly create a Cobra application.`,
 				c.String(404, "No Such Route")
 				return
 			}
+
+			outbound.Owner = owner
+			outbound.Scope = scope
 
 			ch, chErr := amqpHandler.Channel()
 			if chErr != nil {
@@ -185,6 +188,8 @@ func init() {
 
 type payload struct {
 	Route   string
+	Owner   string
+	Scope   string
 	Method  string
 	Url     string
 	Host    string

@@ -23,4 +23,8 @@ amqp:
       request:
         - execute.initial
         - execute.internal
-
+db:
+  username: guest
+  password: guest
+  host: localhost
+  database: funky

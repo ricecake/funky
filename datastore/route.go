@@ -2,23 +2,41 @@ package datastore
 
 import (
 	"encoding/json"
-	"log"
 )
 
-type RouteData map[string][]string
+type DomainRouteData map[string][]string
+type EventRouteData map[string]string
 
-func LookupRoute(host string, path string) (routes []string, err error) {
-	var records []StorageRecord
-	GetDb().Where(`type = 'route' and key = ? and value->? is not null`, host, path).Find(&records)
-	log.Printf("%+v\n", records)
-	for _, record := range records {
-		var data RouteData
+func LookupDomainRoute(host string, path string) (routes []string, owner string, scope string, err error) {
+	var record StorageRecord
+	GetDb().Where(`type = 'domain_route' and key = ? and value->? is not null`, host, path).Find(&record)
+	if record.Id != "" {
+		var data DomainRouteData
 		decodeErr := json.Unmarshal([]byte(record.Value), &data)
 		if decodeErr != nil {
-			return nil, decodeErr
+			return routes, owner, scope, decodeErr
 		}
 		routes = append(routes, data[path]...)
 	}
 
-	return routes, nil
+	return routes, record.Owner, record.Scope, nil
+}
+
+func LookupEventRoute(owner string, scope string, event string) (scriptRecord StorageRecord, err error) {
+	var record StorageRecord
+	GetDb().Where(`type = 'event_route' and owner = ? and scope <@ ? and key = ?`, owner, scope, event).Find(&record)
+
+	if record.Id != "" {
+		var data EventRouteData
+		decodeErr := json.Unmarshal([]byte(record.Value), &data)
+		if decodeErr != nil {
+			return record, decodeErr
+		}
+		scriptRecord.Owner = owner
+		scriptRecord.Scope = scope
+		scriptRecord.Type = "script"
+		scriptRecord.Key = data["script"]
+	}
+
+	return scriptRecord, nil
 }

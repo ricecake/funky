@@ -21,7 +21,9 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
+	"github.com/ricecake/funky/datastore"
 	"github.com/ricecake/funky/engine"
 	"github.com/ricecake/rascal"
 	"github.com/spf13/cobra"
@@ -75,6 +77,22 @@ to quickly create a Cobra application.`,
 		})
 
 		amqpHandler.SetHandler(amqpHandler.Custom, func(msg amqp.Delivery, ch *amqp.Channel) {
+			log.Printf("%s\n", msg.Body)
+
+			var data payload
+			decodeErr := json.Unmarshal(msg.Body, &data)
+			if decodeErr != nil {
+				log.Println(decodeErr.Error())
+				return
+			}
+
+			handler, lookupErr := datastore.LookupEventRoute(data.Owner, data.Scope, data.Route)
+			if lookupErr != nil {
+				log.Println(lookupErr.Error())
+				return
+			}
+			log.Printf("Route: %+v\n", handler)
+
 			resultChan := make(chan string)
 			requestChan := make(chan engine.Request)
 

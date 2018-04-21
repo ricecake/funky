@@ -21,6 +21,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"github.com/gin-gonic/gin"
 	"github.com/ricecake/rascal"
 	"github.com/satori/go.uuid"
@@ -80,7 +81,7 @@ to quickly create a Cobra application.`,
 		amqpHandler.Consume()
 
 		r := gin.Default()
-		r.GET("/ping", func(c *gin.Context) {
+		r.NoRoute(func(c *gin.Context) {
 			corrID, uuidErr := uuid.NewV4()
 			if uuidErr != nil {
 				c.String(500, uuidErr.Error())
@@ -91,6 +92,20 @@ to quickly create a Cobra application.`,
 			if bodyErr != nil {
 				c.String(500, bodyErr.Error())
 			}
+
+			outbound := payload{
+				Method:  c.Request.Method,
+				Url:     c.Request.URL.String(),
+				Host:    c.Request.Host,
+				Body:    rawBody,
+				Headers: c.Request.Header,
+			}
+
+			encodedOutbound, encodeErr := json.Marshal(outbound)
+			if encodeErr != nil {
+				c.String(500, encodeErr.Error())
+			}
+
 			ch, chErr := amqpHandler.Channel()
 			if chErr != nil {
 				c.String(500, chErr.Error())
@@ -110,8 +125,8 @@ to quickly create a Cobra application.`,
 					ContentType:   "text/plain",
 					CorrelationId: corrID.String(),
 					ReplyTo:       amqpHandler.Default,
-					Body:          rawBody,
-					Expiration:   "1000",
+					Body:          encodedOutbound,
+					Expiration:    "1000",
 				})
 			if pubErr != nil {
 				c.String(500, pubErr.Error())
@@ -144,4 +159,12 @@ func init() {
 	// Cobra supports local flags which will only run when this command
 	// is called directly, e.g.:
 	// listenCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+}
+
+type payload struct {
+	Method  string
+	Url     string
+	Host    string
+	Headers map[string][]string
+	Body    []byte
 }

@@ -14,3 +14,8 @@ amqp:
       type: topic
       durable: false
       transient: false
+db:
+  username: guest
+  password: guest
+  host: localhost
+  database: funky

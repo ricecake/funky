@@ -29,7 +29,8 @@ func Connect() (*gorm.DB, error) {
 		password := viper.GetString("db.password")
 		host := viper.GetString("db.host")
 		database := viper.GetString("db.database")
-		db, err = gorm.Open("mysql", fmt.Sprintf("%s:%s@%s/%s?charset=utf8&parseTime=True&loc=Local", username, password, host, database))
+		db, err = gorm.Open("postgres", fmt.Sprintf("user=%s password=%s host=%s dbname=%s sslmode=disable", username, password, host, database))
+		db.LogMode(true)
 	}
 
 	return db, err

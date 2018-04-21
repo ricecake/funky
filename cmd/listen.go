@@ -23,6 +23,7 @@ package cmd
 import (
 	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"github.com/ricecake/funky/datastore"
 	"github.com/ricecake/rascal"
 	"github.com/satori/go.uuid"
 	"github.com/spf13/cobra"
@@ -85,12 +86,14 @@ to quickly create a Cobra application.`,
 			corrID, uuidErr := uuid.NewV4()
 			if uuidErr != nil {
 				c.String(500, uuidErr.Error())
+				return
 			}
 			reqChan := make(chan amqp.Delivery)
 
 			rawBody, bodyErr := c.GetRawData()
 			if bodyErr != nil {
 				c.String(500, bodyErr.Error())
+				return
 			}
 
 			outbound := payload{
@@ -100,15 +103,21 @@ to quickly create a Cobra application.`,
 				Body:    rawBody,
 				Headers: c.Request.Header,
 			}
+			routes, routeErr := datastore.LookupRoute(outbound.Host, outbound.Url)
+			if routeErr != nil {
+				c.String(500, routeErr.Error())
+				return
+			}
 
-			encodedOutbound, encodeErr := json.Marshal(outbound)
-			if encodeErr != nil {
-				c.String(500, encodeErr.Error())
+			if len(routes) == 0 {
+				c.String(404, "No Such Route")
+				return
 			}
 
 			ch, chErr := amqpHandler.Channel()
 			if chErr != nil {
 				c.String(500, chErr.Error())
+				return
 			}
 			defer ch.Close()
 
@@ -116,20 +125,30 @@ to quickly create a Cobra application.`,
 			reqTable[corrID] = reqChan
 			mapLock.Unlock()
 
-			pubErr := ch.Publish(
-				"request",         // exchange
-				"execute.initial", // routing key
-				false,             // mandatory
-				false,             // immediate
-				amqp.Publishing{
-					ContentType:   "text/plain",
-					CorrelationId: corrID.String(),
-					ReplyTo:       amqpHandler.Default,
-					Body:          encodedOutbound,
-					Expiration:    "1000",
-				})
-			if pubErr != nil {
-				c.String(500, pubErr.Error())
+			for _, route := range routes {
+				outbound.Route = route
+				encodedOutbound, encodeErr := json.Marshal(outbound)
+				if encodeErr != nil {
+					c.String(500, encodeErr.Error())
+					return
+				}
+				log.Printf("SENDING %s\n", encodedOutbound)
+				pubErr := ch.Publish(
+					"request",         // exchange
+					"execute.initial", // routing key
+					false,             // mandatory
+					false,             // immediate
+					amqp.Publishing{
+						ContentType:   "text/plain",
+						CorrelationId: corrID.String(),
+						ReplyTo:       amqpHandler.Default,
+						Body:          encodedOutbound,
+						Expiration:    "1000",
+					})
+				if pubErr != nil {
+					c.String(500, pubErr.Error())
+					return
+				}
 			}
 
 			select {
@@ -138,6 +157,9 @@ to quickly create a Cobra application.`,
 					"message": string(reply.Body),
 				})
 			case <-time.After(1 * time.Second):
+				mapLock.Lock()
+				delete(reqTable, corrID)
+				mapLock.Unlock()
 				c.String(500, "TIMEOUT")
 			}
 
@@ -162,6 +184,7 @@ func init() {
 }
 
 type payload struct {
+	Route   string
 	Method  string
 	Url     string
 	Host    string

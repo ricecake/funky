@@ -20,6 +20,10 @@ func (StorageRecord) TableName() string {
 	return "storage"
 }
 
+func (StorageRecord) Load() error {
+	return nil
+}
+
 var db *gorm.DB
 
 func Connect() (*gorm.DB, error) {

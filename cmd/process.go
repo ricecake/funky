@@ -97,8 +97,10 @@ to quickly create a Cobra application.`,
 			inputChan := make(chan engine.Message)
 			outputChan := make(chan engine.Message)
 
+			defer close(inputChan)
+
 			replyChan := make(chan amqp.Delivery)
-			eng, _ := engine.Create("test", inputChan, outputChan)
+			eng, _ := engine.Create(handler.Scope, inputChan, outputChan)
 			defer eng.Cleanup()
 
 			script, readErr := handler.ReadScript()
@@ -106,9 +108,17 @@ to quickly create a Cobra application.`,
 				log.Println(readErr.Error())
 				return
 			}
-			eng.LoadScript(script)
 
-			eng.Execute("cat", map[string]string{"cat": "Dog"})
+			go eng.Run()
+			inputChan <- engine.Message{
+				Type: engine.LoadScript,
+				Data: script,
+			}
+			inputChan <- engine.Message{
+				Type: engine.Request,
+				Data: data,
+			}
+
 			select {
 			case result := <-outputChan:
 				if msg.ReplyTo != "" && msg.CorrelationId != "" {

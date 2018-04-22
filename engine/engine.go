@@ -11,13 +11,14 @@ import (
 type MessageType int
 
 const (
-	Request MessageType = iota
+	Log MessageType = iota
+	Request
 	Event
 	Reply
 	Require
 	DataStore
 	DataLoad
-	Log
+	LoadScript
 )
 
 type Message struct {
@@ -25,12 +26,6 @@ type Message struct {
 	Type  MessageType
 	Route string
 	Data  interface{}
-}
-
-type Requests struct {
-	tag   string
-	route string
-	data  string
 }
 
 type Engine struct {
@@ -112,40 +107,40 @@ func Create(context string, input chan Message, output chan Message) (*Engine, e
 	return this, nil
 }
 
+func (this *Engine) Run() error {
+	defer close(this.Output)
+	for msg := range this.Input {
+		log.Printf("Incoming: %+v\n", msg)
+		switch msg.Type {
+		case LoadScript:
+			this.LoadScript(msg.Data.(string))
+		case Request:
+			if !this.CanExecute {
+				return errors.New("Engine not executable")
+			}
+			ctx := this.Interp
+			ctx.PushGlobalStash()
+			ctx.GetPropString(-1, "handler")
+			ctx.PushString("test")
+
+			ctx.PushObject()
+			ctx.Pcall(2)
+			ctx.JsonEncode(-1)
+			// This should be done via a channel... to make more async
+			result := ctx.GetString(-1)
+			ctx.Pop()
+			this.Output <- Message{
+				Data: result,
+			}
+		}
+	}
+	log.Println("complete")
+	return nil
+}
+
 func (this *Engine) LoadScript(script string) error {
 	ctx := this.Interp
 	ctx.PevalString(script)
-	return nil
-}
-
-func (this *Engine) Execute(name string, context map[string]string) error {
-	if !this.CanExecute {
-		return errors.New("Engine not executable")
-	}
-	ctx := this.Interp
-	ctx.PushGlobalStash()
-	ctx.GetPropString(-1, "handler")
-	ctx.PushString(name)
-
-	ctx.PushObject()
-	for key, value := range context {
-		ctx.PushString(value)
-		ctx.PutPropString(-2, key)
-	}
-	ctx.Pcall(2)
-	ctx.JsonEncode(-1)
-	// This should be done via a channel... to make more async
-	result := ctx.GetString(-1)
-	ctx.Pop()
-	go func() {
-		this.Output <- Message{
-			Data: result,
-		}
-	}()
-	return nil
-}
-
-func (this *Engine) Response(UUID string, data string) error {
 	return nil
 }
 

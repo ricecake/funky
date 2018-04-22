@@ -20,7 +20,30 @@ func (StorageRecord) TableName() string {
 	return "storage"
 }
 
-func (StorageRecord) Load() error {
+func (rec *StorageRecord) Store() error {
+	return nil
+}
+
+func (rec *StorageRecord) Load() error {
+	Query := GetDb()
+	if rec.Id != "" {
+		Query = Query.Where("id = ?", rec.Id)
+	}
+	if rec.Owner != "" {
+		Query = Query.Where("owner = ?", rec.Owner)
+	}
+	if rec.Scope != "" {
+		Query = Query.Where("scope @> ?", rec.Scope)
+	}
+	if rec.Type != "" {
+		Query = Query.Where("type = ?", rec.Type)
+	}
+	if rec.Key != "" {
+		Query = Query.Where("key = ?", rec.Key)
+	}
+
+	Query.First(rec)
+
 	return nil
 }
 

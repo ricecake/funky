@@ -2,12 +2,32 @@ package engine
 
 import (
 	"errors"
+	//        "github.com/ricecake/funky/datastore"
 	"github.com/olebedev/go-duktape"
 	"github.com/satori/go.uuid"
 	"log"
 )
 
-type Request struct {
+type MessageType int
+
+const (
+	Request MessageType = iota
+	Event
+	Reply
+	Require
+	DataStore
+	DataLoad
+	Log
+)
+
+type Message struct {
+	Id    string
+	Type  MessageType
+	Route string
+	Data  interface{}
+}
+
+type Requests struct {
 	tag   string
 	route string
 	data  string
@@ -17,18 +37,18 @@ type Engine struct {
 	Interp     *duktape.Context
 	CanExecute bool
 	context    string
-	result     chan string
-	request    chan Request
+	Input      chan Message
+	Output     chan Message
 }
 
-func Create(context string, result chan string, request chan Request) (*Engine, error) {
+func Create(context string, input chan Message, output chan Message) (*Engine, error) {
 	this := new(Engine)
 	ctx := duktape.New()
 	this.Interp = ctx
 	this.context = context
 
-	this.result = result
-	this.request = request
+	this.Input = input
+	this.Output = output
 
 	ctx.PushGlobalStash()
 	ctx.PushObject()
@@ -118,7 +138,9 @@ func (this *Engine) Execute(name string, context map[string]string) error {
 	result := ctx.GetString(-1)
 	ctx.Pop()
 	go func() {
-		this.result <- result
+		this.Output <- Message{
+			Data: result,
+		}
 	}()
 	return nil
 }

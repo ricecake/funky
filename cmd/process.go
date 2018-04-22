@@ -91,20 +91,26 @@ to quickly create a Cobra application.`,
 				log.Println(lookupErr.Error())
 				return
 			}
+			handler.Load()
 			log.Printf("Route: %+v\n", handler)
 
-			resultChan := make(chan string)
-			requestChan := make(chan engine.Request)
+			inputChan := make(chan engine.Message)
+			outputChan := make(chan engine.Message)
 
 			replyChan := make(chan amqp.Delivery)
-			eng, _ := engine.Create("test", resultChan, requestChan)
+			eng, _ := engine.Create("test", inputChan, outputChan)
 			defer eng.Cleanup()
 
-			eng.LoadScript("setHandler(function(a, b){ return [[\"cat\"]]; })")
+			script, readErr := handler.ReadScript()
+			if readErr != nil {
+				log.Println(readErr.Error())
+				return
+			}
+			eng.LoadScript(script)
 
 			eng.Execute("cat", map[string]string{"cat": "Dog"})
 			select {
-			case result := <-resultChan:
+			case result := <-outputChan:
 				if msg.ReplyTo != "" && msg.CorrelationId != "" {
 					pubErr := ch.Publish(
 						"",          // exchange
@@ -114,7 +120,7 @@ to quickly create a Cobra application.`,
 						amqp.Publishing{
 							ContentType:   "text/plain",
 							CorrelationId: msg.CorrelationId,
-							Body:          []byte(result),
+							Body:          []byte(result.Data.(string)),
 						})
 					if pubErr != nil {
 						log.Println("reply error: %s", pubErr.Error())
@@ -122,7 +128,7 @@ to quickly create a Cobra application.`,
 					}
 				}
 				msg.Ack(false)
-			case request := <-requestChan:
+			case request := <-inputChan:
 				log.Println("request!", request)
 			case reply := <-replyChan:
 				log.Println("reply!", reply)

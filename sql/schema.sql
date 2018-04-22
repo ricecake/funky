@@ -100,6 +100,8 @@ COPY storage (id, owner, scope, type, key, value) FROM stdin;
 9ac60667-00ea-4347-bd64-8c80bab672fc	funky	universal	domain_route	localhost:8080	{"/ping":["test.ping","test.example"]}
 3a8d14ca-7d13-43cb-8b05-94af7ceaf80d	funky	universal	event_route	test.ping	{"script":"example"}
 1807af1d-e95e-47c8-9d9b-3144c715162e	funky	universal	event_route	test.example	{"script":"otherExample"}
+b96ae5eb-7074-464c-ba41-2b8d635692ef	funky	universal	script	example	"setHandler(function(a, b){ return \\"example\\"; })"
+df596a7b-17eb-4b9b-894f-b5c61e92bd14	funky	universal	script	otherExample	"setHandler(function(a, b){ return \\"otherExample\\"; })"
 \.
 
 

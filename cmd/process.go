@@ -119,32 +119,39 @@ to quickly create a Cobra application.`,
 				Data: data,
 			}
 
-			select {
-			case result := <-outputChan:
-				if msg.ReplyTo != "" && msg.CorrelationId != "" {
-					pubErr := ch.Publish(
-						"",          // exchange
-						msg.ReplyTo, // routing key
-						false,       // mandatory
-						false,       // immediate
-						amqp.Publishing{
-							ContentType:   "text/plain",
-							CorrelationId: msg.CorrelationId,
-							Body:          []byte(result.Data.(string)),
-						})
-					if pubErr != nil {
-						log.Println("reply error: %s", pubErr.Error())
-						msg.Nack(false, false)
+			for {
+				select {
+				case result := <-outputChan:
+					switch result.Type {
+					case engine.Log:
+						log.Println("Logging: %s", result.Data.(string))
+					case engine.Reply:
+						if msg.ReplyTo != "" && msg.CorrelationId != "" {
+							pubErr := ch.Publish(
+								"",          // exchange
+								msg.ReplyTo, // routing key
+								false,       // mandatory
+								false,       // immediate
+								amqp.Publishing{
+									ContentType:   "text/plain",
+									CorrelationId: msg.CorrelationId,
+									Body:          []byte(result.Data.(string)),
+								})
+							if pubErr != nil {
+								log.Println("reply error: %s", pubErr.Error())
+								msg.Nack(false, false)
+							}
+						}
+						msg.Ack(false)
+						return
 					}
+				case reply := <-replyChan:
+					log.Println("reply!", reply)
+				case <-time.After(1 * time.Second):
+					msg.Nack(false, false)
+					log.Println("Timeout!")
+					return
 				}
-				msg.Ack(false)
-			case request := <-inputChan:
-				log.Println("request!", request)
-			case reply := <-replyChan:
-				log.Println("reply!", reply)
-			case <-time.After(1 * time.Second):
-				msg.Nack(false, false)
-				log.Println("Timeout!")
 			}
 		})
 

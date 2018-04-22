@@ -51,7 +51,11 @@ func Create(context string, input chan Message, output chan Message) (*Engine, e
 
 	ctx.PushGlobalGoFunction("log", func(c *duktape.Context) int {
 		// log(level, message)
-		log.Println(c.SafeToString(-2) + ": " + c.SafeToString(-1))
+		this.Output <- Message{
+			Type: Log,
+			Data: c.SafeToString(-1),
+		}
+		//		log.Println(c.SafeToString(-2) + ": " + c.SafeToString(-1))
 		return 0
 	})
 	// Need getValue, setValue, loadScript and setResponse functions.  Add channel and context to struct.
@@ -130,6 +134,7 @@ func (this *Engine) Run() error {
 			result := ctx.GetString(-1)
 			ctx.Pop()
 			this.Output <- Message{
+				Type: Reply,
 				Data: result,
 			}
 		}

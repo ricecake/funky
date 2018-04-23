@@ -15,6 +15,7 @@ const (
 	Request
 	Event
 	Reply
+	NoReply
 	Require
 	DataStore
 	DataLoad
@@ -83,6 +84,17 @@ func Create(context string, input chan Message, output chan Message) (*Engine, e
 	})
 	ctx.PushGlobalGoFunction("setResponse", func(c *duktape.Context) int {
 		// setResponse(response)
+		if c.IsNullOrUndefined(0) {
+			this.Output <- Message{Type: NoReply}
+		} else {
+			c.JsonEncode(0)
+			response := c.GetString(0)
+			log.Println(response)
+			this.Output <- Message{
+				Type: Reply,
+				Data: response,
+			}
+		}
 		return 0
 	})
 
@@ -113,6 +125,7 @@ func Create(context string, input chan Message, output chan Message) (*Engine, e
 
 func (this *Engine) Run() error {
 	defer close(this.Output)
+	defer this.Cleanup()
 	for msg := range this.Input {
 		log.Printf("Incoming: %+v\n", msg)
 		switch msg.Type {
@@ -129,14 +142,6 @@ func (this *Engine) Run() error {
 
 			ctx.PushObject()
 			ctx.Pcall(2)
-			ctx.JsonEncode(-1)
-			// This should be done via a channel... to make more async
-			result := ctx.GetString(-1)
-			ctx.Pop()
-			this.Output <- Message{
-				Type: Reply,
-				Data: result,
-			}
 		}
 	}
 	log.Println("complete")

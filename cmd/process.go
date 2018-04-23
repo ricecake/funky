@@ -101,7 +101,6 @@ to quickly create a Cobra application.`,
 
 			replyChan := make(chan amqp.Delivery)
 			eng, _ := engine.Create(handler.Scope, inputChan, outputChan)
-			defer eng.Cleanup()
 
 			script, readErr := handler.ReadScript()
 			if readErr != nil {
@@ -125,6 +124,8 @@ to quickly create a Cobra application.`,
 					switch result.Type {
 					case engine.Log:
 						log.Println("Logging: %s", result.Data.(string))
+					case engine.NoReply:
+						return
 					case engine.Reply:
 						if msg.ReplyTo != "" && msg.CorrelationId != "" {
 							pubErr := ch.Publish(

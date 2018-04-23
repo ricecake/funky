@@ -77,8 +77,6 @@ to quickly create a Cobra application.`,
 		})
 
 		amqpHandler.SetHandler(amqpHandler.Custom, func(msg amqp.Delivery, ch *amqp.Channel) {
-			log.Printf("%s\n", msg.Body)
-
 			var data payload
 			decodeErr := json.Unmarshal(msg.Body, &data)
 			if decodeErr != nil {
@@ -92,7 +90,6 @@ to quickly create a Cobra application.`,
 				return
 			}
 			handler.Load()
-			log.Printf("Route: %+v\n", handler)
 
 			inputChan := make(chan engine.Message)
 			outputChan := make(chan engine.Message)
@@ -110,12 +107,14 @@ to quickly create a Cobra application.`,
 
 			go eng.Run()
 			inputChan <- engine.Message{
-				Type: engine.LoadScript,
-				Data: script,
+				Type:  engine.LoadScript,
+				Route: data.Route,
+				Data:  script,
 			}
 			inputChan <- engine.Message{
-				Type: engine.Request,
-				Data: data,
+				Type:  engine.Request,
+				Route: data.Route,
+				Data:  data,
 			}
 
 			for {

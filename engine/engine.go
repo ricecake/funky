@@ -89,7 +89,6 @@ func Create(context string, input chan Message, output chan Message) (*Engine, e
 		} else {
 			c.JsonEncode(0)
 			response := c.GetString(0)
-			log.Println(response)
 			this.Output <- Message{
 				Type: Reply,
 				Data: response,
@@ -127,7 +126,6 @@ func (this *Engine) Run() error {
 	defer close(this.Output)
 	defer this.Cleanup()
 	for msg := range this.Input {
-		log.Printf("Incoming: %+v\n", msg)
 		switch msg.Type {
 		case LoadScript:
 			this.LoadScript(msg.Data.(string))
@@ -138,13 +136,12 @@ func (this *Engine) Run() error {
 			ctx := this.Interp
 			ctx.PushGlobalStash()
 			ctx.GetPropString(-1, "handler")
-			ctx.PushString("test")
+			ctx.PushString(msg.Route)
 
 			ctx.PushObject()
 			ctx.Pcall(2)
 		}
 	}
-	log.Println("complete")
 	return nil
 }
 
